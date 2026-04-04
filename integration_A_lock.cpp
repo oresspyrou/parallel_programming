@@ -40,6 +40,63 @@ void* thread_func(void* arg) {
     pthread_mutex_lock(&mutex);
     global_sum += 2.0 * local_sum;
     pthread_mutex_unlock(&mutex);
-    
+
     return NULL;
+}
+
+
+int main(int argc, char* argv[]) {
+    if (argc != 5) {
+        fprintf(stderr, "Usage: %s a b n num_threads\n", argv[0]);
+        return 1;
+    }
+
+    double a           = atof(argv[1]);
+    double b           = atof(argv[2]);
+    int    n           = atoi(argv[3]);
+    int    num_threads = atoi(argv[4]);
+
+    // Validate input: n and num_threads must be positive
+    if (n <= 0 || num_threads <= 0) {
+        fprintf(stderr, "Error: n and num_threads must be positive\n");
+        return 1;
+    }
+
+    double h = (b - a) / n;  // width of each trapezoid
+
+    ThreadArgs args[num_threads];
+    pthread_t  threads[num_threads];
+
+    // Τα threads καλύπτουν μόνο i = 1 έως n-1 (τα άκρα f(a)+f(b) υπολογίζονται στο main)
+    int chunk = (n - 1) / num_threads;
+    for (int i = 0; i < num_threads; i++) {
+        args[i].start  = 1 + i * chunk;
+        args[i].end    = (i == num_threads - 1) ? n : 1 + (i + 1) * chunk;
+        args[i].a      = a;
+        args[i].h      = h;
+    }
+
+    struct timespec ts, te;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+
+    // Launch all threads
+    for (int i = 0; i < num_threads; i++)
+        pthread_create(&threads[i], NULL, thread_func, &args[i]);
+
+    // Wait for all threads to finish
+    for (int i = 0; i < num_threads; i++)
+        pthread_join(threads[i], NULL);
+
+    clock_gettime(CLOCK_MONOTONIC, &te);
+
+    // Combine endpoints (counted once) with the shared sum from all threads
+    double total  = f(a) + f(b) + global_sum;
+    double result = (h / 2.0) * total;
+
+    double elapsed = (te.tv_sec - ts.tv_sec) + (te.tv_nsec - ts.tv_nsec) / 1e9;
+
+    printf("Integral from %.4f to %.4f with n=%d, threads=%d: %.10f\n", a, b, n, num_threads, result);
+    printf("Time: %.6f seconds\n", elapsed);
+
+    return 0;
 }
