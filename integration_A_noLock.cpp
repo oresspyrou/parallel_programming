@@ -40,9 +40,10 @@ void* thread_func(void* arg) {
 
     double local_sum = 0.0;
     for (int i = t->start; i < t->end; i++) {
-        local_sum += f(t->a + i * t->h);
+        local_sum += f(t->a + i * t->h);  // x_i = a + i*h
     }
 
+    // Interior nodes are multiplied by 2 in the trapezoidal formula
     t->result = 2.0 * local_sum;
     return NULL;
 }
@@ -68,7 +69,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    double h = (b - a) / n;
+    double h = (b - a) / n;  // width of each trapezoid
 
     ThreadArgs args[num_threads];
     pthread_t  threads[num_threads];
@@ -86,9 +87,11 @@ int main(int argc, char* argv[]) {
     struct timespec ts, te;
     clock_gettime(CLOCK_MONOTONIC, &ts);
 
+    // Launch all threads
     for (int i = 0; i < num_threads; i++)
         pthread_create(&threads[i], NULL, thread_func, &args[i]);
 
+    // Wait for all threads to finish
     for (int i = 0; i < num_threads; i++)
         pthread_join(threads[i], NULL);
 
