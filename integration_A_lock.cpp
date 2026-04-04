@@ -15,7 +15,10 @@ double f(double x) {
     return sin(x);
 }
 
+/** @brief Mutex που προστατεύει την global_sum από race conditions. */
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+
+/** @brief Κοινή μεταβλητή όπου τα threads προσθέτουν τα μερικά αθροίσματά τους. */
 double global_sum = 0.0;
 
 /**
@@ -29,6 +32,15 @@ struct ThreadArgs {
 };
 
 
+/**
+ * @brief Συνάρτηση που εκτελεί κάθε thread.
+ *
+ * Υπολογίζει τοπικά το μερικό άθροισμα για τους κόμβους [start, end),
+ * και στη συνέχεια το προσθέτει στην global_sum με mutex lock.
+ *
+ * @param arg  Δείκτης σε ThreadArgs
+ * @return     NULL
+ */
 void* thread_func(void* arg) {
     ThreadArgs* t = (ThreadArgs*) arg;
 
@@ -45,6 +57,11 @@ void* thread_func(void* arg) {
 }
 
 
+/**
+ * @brief Κύριο πρόγραμμα. Διαβάζει a, b, n, num_threads από command line,
+ *        μοιράζει τον υπολογισμό σε threads με mutex-protected global_sum,
+ *        και εκτυπώνει αποτέλεσμα + χρόνο.
+ */
 int main(int argc, char* argv[]) {
     if (argc != 5) {
         fprintf(stderr, "Usage: %s a b n num_threads\n", argv[0]);
