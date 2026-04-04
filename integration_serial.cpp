@@ -50,6 +50,12 @@ int main(int argc, char* argv[]) {
     double b = atof(argv[2]);
     int    n = atoi(argv[3]);
 
+    // Validate input: n must be a positive integer
+    if (n <= 0) {
+        fprintf(stderr, "Error: n must be positive\n");
+        return 1;
+    }
+
     struct timespec ts, te;
     clock_gettime(CLOCK_MONOTONIC, &ts);
 
