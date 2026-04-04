@@ -73,10 +73,11 @@ int main(int argc, char* argv[]) {
     ThreadArgs args[num_threads];
     pthread_t  threads[num_threads];
 
-    // Μοίρασε τα τμήματα [1, n-1] στα threads (τα άκρα f(a)+f(b) υπολογίζονται στο main)
+    // Τα threads καλύπτουν μόνο i = 1 έως n-1 (τα άκρα f(a)+f(b) υπολογίζονται στο main)
+    int chunk = (n - 1) / num_threads;
     for (int i = 0; i < num_threads; i++) {
-        args[i].start  = i * (n / num_threads);
-        args[i].end    = (i == num_threads - 1) ? n : (i + 1) * (n / num_threads);
+        args[i].start  = 1 + i * chunk;
+        args[i].end    = (i == num_threads - 1) ? n : 1 + (i + 1) * chunk;
         args[i].a      = a;
         args[i].h      = h;
         args[i].result = 0.0;
