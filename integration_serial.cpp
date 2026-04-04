@@ -5,10 +5,25 @@
 #include <math.h>
 #include <time.h>
 
+/**
+ * @brief Η συνάρτηση προς ολοκλήρωση.
+ * @param x  Τιμή της μεταβλητής
+ * @return   sin(x)
+ */
 double f(double x) {
     return sin(x);
 }
 
+/**
+ * @brief Υπολογίζει το ολοκλήρωμα της f(x) με τον τραπεζοειδή κανόνα.
+ *
+ * Χωρίζει το [a,b] σε n ίσα τμήματα και αθροίζει τα εμβαδά των τραπεζίων.
+ *
+ * @param a  Αρχή διαστήματος
+ * @param b  Τέλος διαστήματος
+ * @param n  Αριθμός τραπεζίων
+ * @return   Προσεγγιστική τιμή του ολοκληρώματος
+ */
 double trapezoidal(double a, double b, int n) {
     double h   = (b - a) / n;
     double sum = f(a) + f(b);        
@@ -20,6 +35,11 @@ double trapezoidal(double a, double b, int n) {
     return (h / 2.0) * sum;
 }
 
+
+/**
+ * @brief Κύριο πρόγραμμα. Διαβάζει a, b, n από command line και εκτυπώνει
+ *        το αποτέλεσμα του ολοκληρώματος μαζί με τον χρόνο εκτέλεσης.
+ */
 int main(int argc, char* argv[]) {
     if (argc != 4) {
         fprintf(stderr, "Usage: %s a b n\n", argv[0]);
