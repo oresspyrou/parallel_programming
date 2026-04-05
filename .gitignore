@@ -1,7 +1,7 @@
-# Compiled executables
-*.exe
-*.out
-*.o
+# Compiled executables (anywhere in the repo)
+**/*.exe
+**/*.out
+**/*.o
 
 # Compiled binaries output folder
 bin/
@@ -15,3 +15,5 @@ trapmaster/
 # Python cache
 __pycache__/
 *.pyc
+
+bin/
