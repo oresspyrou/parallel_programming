@@ -1,4 +1,4 @@
-//Headers
+// Headers
 #define _POSIX_C_SOURCE 199309L
 #include <stdio.h>
 #include <stdlib.h>
@@ -7,79 +7,81 @@
 #include <pthread.h>
 
 /**
- * @brief Η συνάρτηση προς ολοκλήρωση.
- * @param x  Τιμή της μεταβλητής
+ * @brief The function to integrate.
+ * @param x  Variable value
  * @return   sin(x)
  */
 double f(double x) {
     return sin(x);
 }
 
-/** @brief Mutex που προστατεύει την global_sum από race conditions. */
+/** @brief Mutex protecting both next_i (work counter) and global_sum. */
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
-/** @brief Κοινή μεταβλητή όπου τα threads προσθέτουν τα μερικά αθροίσματά τους. */
+/** @brief Shared variable where threads accumulate their partial sums. */
 double global_sum = 0.0;
 
-/** @brief Επόμενος κόμβος προς επεξεργασία — τα threads τον διαβάζουν/αυξάνουν δυναμικά. */
+/** @brief Next node index to be processed — threads claim chunks from here dynamically. */
 int next_i = 1;
 
 /**
- * @brief Ορίσματα που περνάει το main σε κάθε thread.
+ * @brief Arguments passed by main to each thread.
  */
 struct ThreadArgs {
-    double a;        // κάτω όριο (για να υπολογίζει a + i*h)
-    double h;        // βήμα — υπολογισμένο στο main
-    int    n;           // συνολικός αριθμός τραπεζίων — άνω όριο του loop
-    int chunk_size;    // πόσους κόμβους επεξεργάζεται κάθε φορά (για δυναμική κατανομή)
+    double a;          // lower bound (used to compute x_i = a + i*h)
+    double h;          // step width — computed in main
+    int    n;          // total number of trapezoids — upper loop bound
+    int    chunk_size; // number of nodes each thread claims per iteration
 };
 
-
 /**
- * @brief Συνάρτηση που εκτελεί κάθε thread — dynamic scheduling.
+ * @brief Thread function — dynamic scheduling via shared work queue.
  *
- * Επαναλαμβάνει: παίρνει δυναμικά το επόμενο chunk από την next_i,
- * υπολογίζει το τοπικό άθροισμα, και το προσθέτει στην global_sum.
- * Σταματά όταν δεν υπάρχουν άλλοι κόμβοι προς επεξεργασία.
+ * Each thread repeatedly claims the next chunk of work from next_i,
+ * computes the local partial sum independently, then adds it to global_sum.
+ * Stops when no more nodes remain (next_i >= n).
+ * Two separate critical sections are used to minimize lock contention:
+ *   1. Claim the next chunk (short, just read + increment next_i)
+ *   2. Add result to global_sum (short, just one addition)
  *
- * @param arg  Δείκτης σε ThreadArgs
+ * @param arg  Pointer to ThreadArgs
  * @return     NULL
  */
 void* thread_func(void* arg) {
     ThreadArgs* t = (ThreadArgs*) arg;
 
     while (true) {
-        // [LOCK] πάρε το επόμενο chunk και προχώρα τον μετρητή
+        // [LOCK] claim the next chunk and advance the work counter
         pthread_mutex_lock(&mutex);
         int i_start = next_i;
         next_i += t->chunk_size;
         pthread_mutex_unlock(&mutex);
 
-        // Δεν υπάρχει άλλη δουλειά
+        // No more work available
         if (i_start >= t->n) break;
 
-        // Υπολόγισε το κομμάτι [i_start, i_end)
+        // Compute chunk [i_start, i_end) outside the lock
         int i_end = i_start + t->chunk_size;
-        if (i_end > t->n) i_end = t->n;  // μην ξεπεράσεις το n
+        if (i_end > t->n) i_end = t->n;  // clamp last chunk to n
 
         double local_sum = 0.0;
         for (int i = i_start; i < i_end; i++) {
             local_sum += f(t->a + i * t->h);  // x_i = a + i*h
         }
 
-        // [LOCK] πρόσθεσε στην global_sum
+        // [LOCK] add partial sum to the shared accumulator
         pthread_mutex_lock(&mutex);
-        global_sum += 2.0 * local_sum;
+        global_sum += 2.0 * local_sum;  // interior nodes count twice
         pthread_mutex_unlock(&mutex);
     }
 
     return NULL;
 }
 
-
 /**
- * @brief Κύριο πρόγραμμα. Διαβάζει a, b, n, num_threads, chunk_size από command line,
- *        μοιράζει δυναμικά τους κόμβους σε threads και εκτυπώνει αποτέλεσμα + χρόνο.
+ * @brief Main program. Reads a, b, n, num_threads, chunk_size from command line,
+ *        dynamically distributes nodes across threads via a shared work queue,
+ *        and prints the result and execution time.
  */
 int main(int argc, char* argv[]) {
     if (argc != 6) {
@@ -104,7 +106,7 @@ int main(int argc, char* argv[]) {
     ThreadArgs args[num_threads];
     pthread_t  threads[num_threads];
 
-    // Όλα τα threads μοιράζονται τα ίδια args — η κατανομή γίνεται δυναμικά μέσω next_i
+    // All threads share the same args — work distribution happens dynamically via next_i
     for (int i = 0; i < num_threads; i++) {
         args[i].a          = a;
         args[i].h          = h;
@@ -113,7 +115,7 @@ int main(int argc, char* argv[]) {
     }
 
     struct timespec ts, te;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
+    clock_gettime(CLOCK_MONOTONIC, &ts);  // start timer
 
     // Launch all threads
     for (int i = 0; i < num_threads; i++)
@@ -123,7 +125,7 @@ int main(int argc, char* argv[]) {
     for (int i = 0; i < num_threads; i++)
         pthread_join(threads[i], NULL);
 
-    clock_gettime(CLOCK_MONOTONIC, &te);
+    clock_gettime(CLOCK_MONOTONIC, &te);  // stop timer
 
     // Combine endpoints (counted once) with the shared sum from all threads
     double total  = f(a) + f(b) + global_sum;

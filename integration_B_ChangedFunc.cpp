@@ -1,4 +1,4 @@
-//Headers
+// Headers
 #define _POSIX_C_SOURCE 199309L
 #include <stdio.h>
 #include <stdlib.h>
@@ -7,47 +7,50 @@
 #include <pthread.h>
 
 /**
- * @brief Η συνάρτηση προς ολοκλήρωση με τεχνητό φόρτο.
+ * @brief The function to integrate — with artificial non-uniform load.
  *
- * Υπολογίζει sin(x) και στη συνέχεια εκτελεί έναν αριθμό επαναλήψεων
- * που εξαρτάται από το x, προσομοιώνοντας ανισόμορφο (non-uniform) φόρτο.
- * Αυτό δοκιμάζει πόσο καλά η cyclic κατανομή εξισορροπεί το φόρτο μεταξύ threads.
+ * Computes sin(x) and then runs a variable number of extra iterations
+ * depending on x, simulating non-uniform computational cost per node.
+ * Nodes with larger x values require more work, creating load imbalance.
+ * Cyclic distribution handles this better than block distribution because
+ * it interleaves cheap and expensive nodes across all threads.
  *
- * @param x  Τιμή της μεταβλητής
- * @return   Προσεγγιστική τιμή sin(x) με μικρή αριθμητική διαταραχή
+ * @param x  Variable value
+ * @return   Approximate sin(x) with small numerical perturbation
  */
 double f(double x) {
     double result = sin(x);
-    // Προσθέτουμε τεχνητό φόρτο που αυξάνεται με το x
+    // Artificial load: number of iterations grows with x
     int iterations = (int)(x * 1000) % 500;
     for (int k = 0; k < iterations; k++)
         result += sin(result * 0.0001);
     return result;
 }
+
 /**
- * @brief Ορίσματα που περνάει το main σε κάθε thread.
+ * @brief Arguments passed by main to each thread.
  *
- * Χρησιμοποιείται cyclic κατανομή: thread i επεξεργάζεται
- * κόμβους i+1, i+1+num_threads, i+1+2*num_threads, ...
+ * Uses cyclic (interleaved) distribution: thread k processes
+ * nodes k+1, k+1+T, k+1+2T, ... where T = num_threads.
  */
 struct ThreadArgs {
-    int    thread_id;   // ID του thread — καθορίζει ποιους κόμβους επεξεργάζεται
-    int    num_threads; // συνολικός αριθμός threads — βήμα του cyclic loop
-    int    n;           // συνολικός αριθμός τραπεζίων — άνω όριο του loop
-    double a;           // κάτω όριο ολοκλήρωσης
-    double h;           // βήμα — υπολογισμένο στο main
-    double result;      // εδώ γράφει το μερικό άθροισμά του (χωρίς lock)
+    int    thread_id;   // thread ID — determines which nodes this thread processes
+    int    num_threads; // total number of threads — stride of the cyclic loop
+    int    n;           // total number of trapezoids — upper loop bound
+    double a;           // lower bound of integration
+    double h;           // step width — computed in main
+    double result;      // thread writes its partial sum here (no lock needed)
 };
 
 /**
- * @brief Συνάρτηση που εκτελεί κάθε thread.
+ * @brief Thread function — cyclic (interleaved) distribution, no locks.
  *
- * Χρησιμοποιεί **cyclic κατανομή**: thread με id=k επεξεργάζεται
- * τους κόμβους i = k+1, k+1+T, k+1+2T, ... (T = num_threads).
- * Γράφει το αποτέλεσμα στο args->result χωρίς lock,
- * καθώς κάθε thread έχει το δικό του result field.
+ * Thread with id=k processes nodes: i = k+1, k+1+T, k+1+2T, ... (T = num_threads).
+ * With the non-uniform f(x), cyclic distribution achieves better load balance
+ * than block distribution because expensive nodes are spread across all threads.
+ * No synchronization needed — each thread writes to its own result field.
  *
- * @param arg  Δείκτης σε ThreadArgs
+ * @param arg  Pointer to ThreadArgs
  * @return     NULL
  */
 void* thread_func(void* arg) {
@@ -64,9 +67,9 @@ void* thread_func(void* arg) {
 }
 
 /**
- * @brief Κύριο πρόγραμμα. Διαβάζει a, b, n, num_threads από command line,
- *        μοιράζει τους κόμβους με cyclic κατανομή σε threads (χωρίς lock)
- *        και εκτυπώνει αποτέλεσμα + χρόνο.
+ * @brief Main program. Reads a, b, n, num_threads from command line,
+ *        distributes nodes using cyclic scheduling with non-uniform f(x),
+ *        and prints the result and execution time.
  */
 int main(int argc, char* argv[]) {
     if (argc != 5) {
@@ -90,7 +93,8 @@ int main(int argc, char* argv[]) {
     ThreadArgs args[num_threads];
     pthread_t  threads[num_threads];
 
-    // Cyclic κατανομή: κάθε thread παίρνει το thread_id του και τρέχει i = id+1, id+1+T, ...
+    // Cyclic distribution: thread i handles nodes i+1, i+1+T, i+1+2T, ...
+    // Endpoints f(a) and f(b) are handled by main after all threads finish
     for (int i = 0; i < num_threads; i++) {
         args[i].thread_id   = i;
         args[i].num_threads = num_threads;
@@ -101,7 +105,7 @@ int main(int argc, char* argv[]) {
     }
 
     struct timespec ts, te;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
+    clock_gettime(CLOCK_MONOTONIC, &ts);  // start timer
 
     // Launch all threads
     for (int i = 0; i < num_threads; i++)
@@ -111,9 +115,9 @@ int main(int argc, char* argv[]) {
     for (int i = 0; i < num_threads; i++)
         pthread_join(threads[i], NULL);
 
-    clock_gettime(CLOCK_MONOTONIC, &te);
+    clock_gettime(CLOCK_MONOTONIC, &te);  // stop timer
 
-    // Συγκέντρωσε μερικά αθροίσματα — τα άκρα f(a) και f(b) μετράνε μία φορά
+    // Collect partial sums — endpoints f(a) and f(b) count once
     double total = f(a) + f(b);
     for (int i = 0; i < num_threads; i++)
         total += args[i].result;

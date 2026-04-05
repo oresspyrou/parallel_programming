@@ -1,4 +1,4 @@
-//Headers
+// Headers
 #define _POSIX_C_SOURCE 199309L
 #include <stdio.h>
 #include <stdlib.h>
@@ -7,40 +7,41 @@
 #include <pthread.h>
 
 /**
- * @brief Η συνάρτηση προς ολοκλήρωση.
- * @param x  Τιμή της μεταβλητής
+ * @brief The function to integrate.
+ * @param x  Variable value
  * @return   sin(x)
  */
 double f(double x) {
     return sin(x);
 }
 
-/** @brief Mutex που προστατεύει την global_sum από race conditions. */
+/** @brief Mutex protecting global_sum from race conditions. */
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
-/** @brief Κοινή μεταβλητή όπου τα threads προσθέτουν τα μερικά αθροίσματά τους. */
+/** @brief Shared variable where threads accumulate their partial sums. */
 double global_sum = 0.0;
 
 /**
- * @brief Ορίσματα που περνάει το main σε κάθε thread.
+ * @brief Arguments passed by main to each thread.
  */
 struct ThreadArgs {
-    int    thread_id; // ID του thread (για εκτύπωση)
-    int    start;     // πρώτο i που επεξεργάζεται
-    int    end;       // τελευταίο i (exclusive)
-    double a;         // κάτω όριο (για να υπολογίζει a + i*h)
-    double h;         // βήμα — υπολογισμένο στο main
-    double fa_fb;     // f(a)+f(b), για τον ενδιάμεσο υπολογισμό μέσα στο lock
+    int    thread_id; // thread ID — used for progress output
+    int    start;     // first index i this thread processes (inclusive)
+    int    end;       // last index i this thread processes (exclusive)
+    double a;         // lower bound (used to compute x_i = a + i*h)
+    double h;         // step width — computed in main
+    double fa_fb;     // f(a)+f(b), passed to each thread for intermediate estimates
 };
 
 /**
- * @brief Συνάρτηση που εκτελεί κάθε thread.
+ * @brief Thread function — static block distribution with progressive updates.
  *
- * Υπολογίζει τοπικά το μερικό άθροισμα για τους κόμβους [start, end),
- * μετά μπαίνει στο critical section όπου ενημερώνει την global_sum και
- * τυπώνει την τρέχουσα εκτίμηση του ολοκληρώματος.
+ * Each thread computes its local partial sum for nodes in [start, end),
+ * then enters the critical section to update global_sum and print the
+ * current running estimate of the integral. The estimate is partial until
+ * all threads have completed.
  *
- * @param arg  Δείκτης σε ThreadArgs
+ * @param arg  Pointer to ThreadArgs
  * @return     NULL
  */
 void* thread_func(void* arg) {
@@ -51,11 +52,11 @@ void* thread_func(void* arg) {
         local_sum += f(t->a + i * t->h);  // x_i = a + i*h
     }
 
-    // Critical section: ενημέρωσε global_sum και τύπωσε τρέχον αποτέλεσμα
+    // Critical section: update global_sum and print current estimate
     pthread_mutex_lock(&mutex);
-    global_sum += 2.0 * local_sum;
+    global_sum += 2.0 * local_sum;  // interior nodes count twice
 
-    // Τρέχον αποτέλεσμα μέχρι στιγμής (μερικό — δεν έχουν τελειώσει όλα τα threads)
+    // Intermediate estimate — partial until all threads finish
     double current = (t->h / 2.0) * (t->fa_fb + global_sum);
     printf("  [Thread %d done] current estimate: %.10f\n", t->thread_id, current);
 
@@ -65,9 +66,9 @@ void* thread_func(void* arg) {
 }
 
 /**
- * @brief Κύριο πρόγραμμα. Διαβάζει a, b, n, num_threads από command line,
- *        μοιράζει τον υπολογισμό σε threads, τυπώνει ενδιάμεσα αποτελέσματα
- *        καθώς τελειώνει κάθε thread, και εκτυπώνει το τελικό αποτέλεσμα + χρόνο.
+ * @brief Main program. Reads a, b, n, num_threads from command line,
+ *        distributes work in contiguous blocks, prints a running estimate
+ *        as each thread completes, and prints the final result and execution time.
  */
 int main(int argc, char* argv[]) {
     if (argc != 5) {
@@ -91,7 +92,8 @@ int main(int argc, char* argv[]) {
     ThreadArgs args[num_threads];
     pthread_t  threads[num_threads];
 
-    // Τα threads καλύπτουν μόνο i = 1 έως n-1 (τα άκρα f(a)+f(b) υπολογίζονται στο main)
+    // Distribute interior nodes i=1..n-1 across threads in contiguous blocks
+    // fa_fb is passed so each thread can compute an intermediate estimate inside the lock
     int chunk = (n - 1) / num_threads;
     for (int i = 0; i < num_threads; i++) {
         args[i].thread_id = i;
@@ -99,11 +101,11 @@ int main(int argc, char* argv[]) {
         args[i].end       = (i == num_threads - 1) ? n : 1 + (i + 1) * chunk;
         args[i].a         = a;
         args[i].h         = h;
-        args[i].fa_fb     = f(a) + f(b);  // περνιέται σε κάθε thread για την ενδιάμεση εκτίμηση
+        args[i].fa_fb     = f(a) + f(b);  // endpoints needed for the running estimate
     }
 
     struct timespec ts, te;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
+    clock_gettime(CLOCK_MONOTONIC, &ts);  // start timer
 
     // Launch all threads
     for (int i = 0; i < num_threads; i++)
@@ -113,7 +115,7 @@ int main(int argc, char* argv[]) {
     for (int i = 0; i < num_threads; i++)
         pthread_join(threads[i], NULL);
 
-    clock_gettime(CLOCK_MONOTONIC, &te);
+    clock_gettime(CLOCK_MONOTONIC, &te);  // stop timer
 
     // Combine endpoints (counted once) with the shared sum from all threads
     double total  = f(a) + f(b) + global_sum;

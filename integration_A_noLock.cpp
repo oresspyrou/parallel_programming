@@ -1,4 +1,4 @@
-//Headers
+// Headers
 #define _POSIX_C_SOURCE 199309L
 #include <stdio.h>
 #include <stdlib.h>
@@ -7,8 +7,8 @@
 #include <pthread.h>
 
 /**
- * @brief Η συνάρτηση προς ολοκλήρωση.
- * @param x  Τιμή της μεταβλητής
+ * @brief The function to integrate.
+ * @param x  Variable value
  * @return   sin(x)
  */
 double f(double x) {
@@ -16,23 +16,24 @@ double f(double x) {
 }
 
 /**
- * @brief Ορίσματα που περνάει το main σε κάθε thread.
+ * @brief Arguments passed by main to each thread.
  */
 struct ThreadArgs {
-    int    start;    // πρώτο i που επεξεργάζεται
-    int    end;      // τελευταίο i (exclusive)
-    double a;        // κάτω όριο (για να υπολογίζει a + i*h)
-    double h;        // βήμα — υπολογισμένο στο main
-    double result;   // εδώ γράφει το μερικό άθροισμά του
+    int    start;   // first index i this thread processes (inclusive)
+    int    end;     // last index i this thread processes (exclusive)
+    double a;       // lower bound (used to compute x_i = a + i*h)
+    double h;       // step width — computed in main
+    double result;  // thread writes its partial sum here (no lock needed)
 };
 
 /**
- * @brief Συνάρτηση που εκτελεί κάθε thread.
+ * @brief Thread function — static block distribution, no locks.
  *
- * Υπολογίζει το μερικό άθροισμα 2*f(x_i) για τους κόμβους [start, end)
- * και το αποθηκεύει στο args->result (χωρίς lock — κάθε thread γράφει στο δικό του).
+ * Each thread computes the partial sum 2*f(x_i) for nodes in [start, end)
+ * and writes it to args->result. No synchronization is needed because
+ * each thread has its own result field.
  *
- * @param arg  Δείκτης σε ThreadArgs
+ * @param arg  Pointer to ThreadArgs
  * @return     NULL
  */
 void* thread_func(void* arg) {
@@ -49,8 +50,9 @@ void* thread_func(void* arg) {
 }
 
 /**
- * @brief Κύριο πρόγραμμα. Διαβάζει a, b, n, num_threads από command line,
- *        μοιράζει τον υπολογισμό σε threads και εκτυπώνει αποτέλεσμα + χρόνο.
+ * @brief Main program. Reads a, b, n, num_threads from command line,
+ *        distributes work across threads in contiguous blocks (no locks),
+ *        and prints the result and execution time.
  */
 int main(int argc, char* argv[]) {
     if (argc != 5) {
@@ -74,7 +76,8 @@ int main(int argc, char* argv[]) {
     ThreadArgs args[num_threads];
     pthread_t  threads[num_threads];
 
-    // Τα threads καλύπτουν μόνο i = 1 έως n-1 (τα άκρα f(a)+f(b) υπολογίζονται στο main)
+    // Distribute interior nodes i=1..n-1 across threads in contiguous blocks
+    // Endpoints f(a) and f(b) are handled by main after all threads finish
     int chunk = (n - 1) / num_threads;
     for (int i = 0; i < num_threads; i++) {
         args[i].start  = 1 + i * chunk;
@@ -85,7 +88,7 @@ int main(int argc, char* argv[]) {
     }
 
     struct timespec ts, te;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
+    clock_gettime(CLOCK_MONOTONIC, &ts);  // start timer
 
     // Launch all threads
     for (int i = 0; i < num_threads; i++)
@@ -95,9 +98,9 @@ int main(int argc, char* argv[]) {
     for (int i = 0; i < num_threads; i++)
         pthread_join(threads[i], NULL);
 
-    clock_gettime(CLOCK_MONOTONIC, &te);
+    clock_gettime(CLOCK_MONOTONIC, &te);  // stop timer
 
-    // Συγκέντρωσε μερικά αθροίσματα — τα άκρα f(a) και f(b) μετράνε μία φορά
+    // Collect partial sums — endpoints f(a) and f(b) count once
     double total = f(a) + f(b);
     for (int i = 0; i < num_threads; i++)
         total += args[i].result;
