@@ -6,17 +6,19 @@
 # Usage: bash run_experiments.sh
 # ============================================================
 
-RUNS=20             # number of runs per configuration
-A=0                 # lower bound of integration
-B=3.14159265        # upper bound (pi)
-N=1000000           # number of trapezoids
-THREADS=(1 2 3 4)   # thread counts to test
+RUNS=20              # number of runs per configuration
+A=0                  # lower bound of integration
+B=3.14159265         # upper bound (pi)
+N=1000000            # number of trapezoids
+THREADS=(1 2 3 4)    # thread counts to test
 CHUNKS=(10 100 1000) # chunk sizes to test for dynamic scheduling (C)
 
 # ============================================================
 # Step 1: Compile all programs
 # ============================================================
 echo "=== Compiling all programs ==="
+
+mkdir -p bin  # create output directory for executables
 
 compile() {
     local src=$1
@@ -30,14 +32,14 @@ compile() {
     fi
 }
 
-compile integration_serial.cpp          integration_serial
-compile integration_A_noLock.cpp        integration_A_noLock
-compile integration_A_lock.cpp          integration_A_lock
-compile integration_A_progressive.cpp   integration_A_progressive
-compile integration_B.cpp               integration_B
-compile integration_B_ChangedFunc.cpp   integration_B_ChangedFunc
-compile integration_C.cpp               integration_C
-compile integration_C_ChangedFunc.cpp   integration_C_ChangedFunc
+compile src/integration_serial.cpp          bin/integration_serial
+compile src/integration_A_noLock.cpp        bin/integration_A_noLock
+compile src/integration_A_lock.cpp          bin/integration_A_lock
+compile src/integration_A_progressive.cpp   bin/integration_A_progressive
+compile src/integration_B.cpp               bin/integration_B
+compile src/integration_B_ChangedFunc.cpp   bin/integration_B_ChangedFunc
+compile src/integration_C.cpp               bin/integration_C
+compile src/integration_C_ChangedFunc.cpp   bin/integration_C_ChangedFunc
 
 # ============================================================
 # Step 2: Helper — runs a command $RUNS times, returns average
@@ -66,14 +68,14 @@ echo ""
 
 # --- Serial ---
 echo "--- Serial ---"
-avg=$(run_avg ./integration_serial $A $B $N)
+avg=$(run_avg ./bin/integration_serial $A $B $N)
 echo "  avg time: $avg seconds"
 echo ""
 
 # --- A: Static Block, No Lock ---
 echo "--- A: Static Block (No Lock) ---"
 for t in "${THREADS[@]}"; do
-    avg=$(run_avg ./integration_A_noLock $A $B $N $t)
+    avg=$(run_avg ./bin/integration_A_noLock $A $B $N $t)
     echo "  threads=$t  ->  $avg seconds"
 done
 echo ""
@@ -81,7 +83,7 @@ echo ""
 # --- A: Static Block, With Lock ---
 echo "--- A: Static Block (With Lock) ---"
 for t in "${THREADS[@]}"; do
-    avg=$(run_avg ./integration_A_lock $A $B $N $t)
+    avg=$(run_avg ./bin/integration_A_lock $A $B $N $t)
     echo "  threads=$t  ->  $avg seconds"
 done
 echo ""
@@ -90,7 +92,7 @@ echo ""
 # Intermediate prints are suppressed (redirected to /dev/null) for clean timing
 echo "--- A: Progressive (With Lock) ---"
 for t in "${THREADS[@]}"; do
-    avg=$(run_avg ./integration_A_progressive $A $B $N $t)
+    avg=$(run_avg ./bin/integration_A_progressive $A $B $N $t)
     echo "  threads=$t  ->  $avg seconds"
 done
 echo ""
@@ -98,7 +100,7 @@ echo ""
 # --- B: Cyclic (Interleaved), uniform f(x) ---
 echo "--- B: Cyclic / Interleaved (uniform f) ---"
 for t in "${THREADS[@]}"; do
-    avg=$(run_avg ./integration_B $A $B $N $t)
+    avg=$(run_avg ./bin/integration_B $A $B $N $t)
     echo "  threads=$t  ->  $avg seconds"
 done
 echo ""
@@ -106,7 +108,7 @@ echo ""
 # --- B: Cyclic (Interleaved), non-uniform f(x) ---
 echo "--- B: Cyclic / Interleaved (non-uniform f) ---"
 for t in "${THREADS[@]}"; do
-    avg=$(run_avg ./integration_B_ChangedFunc $A $B $N $t)
+    avg=$(run_avg ./bin/integration_B_ChangedFunc $A $B $N $t)
     echo "  threads=$t  ->  $avg seconds"
 done
 echo ""
@@ -115,7 +117,7 @@ echo ""
 echo "--- C: Dynamic Scheduling (uniform f) ---"
 for t in "${THREADS[@]}"; do
     for c in "${CHUNKS[@]}"; do
-        avg=$(run_avg ./integration_C $A $B $N $t $c)
+        avg=$(run_avg ./bin/integration_C $A $B $N $t $c)
         echo "  threads=$t  chunk=$c  ->  $avg seconds"
     done
 done
@@ -125,7 +127,7 @@ echo ""
 echo "--- C: Dynamic Scheduling (non-uniform f) ---"
 for t in "${THREADS[@]}"; do
     for c in "${CHUNKS[@]}"; do
-        avg=$(run_avg ./integration_C_ChangedFunc $A $B $N $t $c)
+        avg=$(run_avg ./bin/integration_C_ChangedFunc $A $B $N $t $c)
         echo "  threads=$t  chunk=$c  ->  $avg seconds"
     done
 done
