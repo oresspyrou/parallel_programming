@@ -9,7 +9,7 @@
 RUNS=20              # number of runs per configuration
 A=0                  # lower bound of integration
 B=3.14159265         # upper bound (pi)
-N_VALUES=(100000 1000000 10000000)# number of trapezoids
+N_VALUES=(100000 1000000 10000000) # number of trapezoids
 THREADS=(1 2 3 4)    # thread counts to test
 CHUNKS=(10 100 1000) # chunk sizes to test for dynamic scheduling (C)
 
