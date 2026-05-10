@@ -12,13 +12,12 @@ double f(double x) {
     return r;
 }
 
-// Computes the trapezoidal sum for a sub-interval [x_start, x_end) of indices.
-// Called inside each task — no synchronisation needed on local_sum.
+// Computes the trapezoidal interior sum for indices [i_start, i_end).
 double integrate_segment(double a, double h, int i_start, int i_end) {
-    double local_sum = 0.0;
+    double local = 0.0;
     for (int i = i_start; i < i_end; i++)
-        local_sum += f(a + i * h);
-    return local_sum;
+        local += f(a + i * h);
+    return local;
 }
 
 int main(int argc, char* argv[]) {
@@ -40,14 +39,16 @@ int main(int argc, char* argv[]) {
 
     omp_set_num_threads(num_threads);
 
-    double h   = (b - a) / n;
-    double sum = 0.0;
+    double h = (b - a) / n;
+
+    // Each task writes its result to its own slot — no synchronisation needed.
+    double* partial = new double[num_tasks]();
 
     double start = omp_get_wtime();
 
     #pragma omp parallel
     {
-        // Only one thread creates the tasks; all threads execute them.
+        // One thread creates all tasks; all threads in the team execute them.
         #pragma omp single
         {
             int chunk = (n - 1) / num_tasks;
@@ -56,19 +57,22 @@ int main(int argc, char* argv[]) {
                 int i_start = 1 + t * chunk;
                 int i_end   = (t == num_tasks - 1) ? n : i_start + chunk;
 
-                // Each task captures its segment boundaries and accumulates
-                // into sum via a critical section — tasks run concurrently,
-                // only the final addition is serialised.
-                #pragma omp task firstprivate(i_start, i_end) shared(sum)
-                {
-                    double local = integrate_segment(a, h, i_start, i_end);
-                    #pragma omp critical
-                    sum += local;
-                }
+                // firstprivate ensures each task gets its own copies of the
+                // loop indices; partial is shared (pointer, not the array).
+                #pragma omp task firstprivate(t, i_start, i_end)
+                partial[t] = integrate_segment(a, h, i_start, i_end);
             }
+
+            // Wait for all tasks to finish before reading partial[].
+            #pragma omp taskwait
+
+            // Merge partial results in the thread that created the tasks.
         }
-        // implicit taskwait at end of single; all tasks complete before barrier
     }
+
+    double sum = 0.0;
+    for (int t = 0; t < num_tasks; t++)
+        sum += partial[t];
 
     double elapsed = omp_get_wtime() - start;
 
@@ -78,5 +82,6 @@ int main(int argc, char* argv[]) {
               << " = " << integral << "\n";
     std::cout << "Execution time: " << elapsed << " seconds\n";
 
+    delete[] partial;
     return 0;
 }

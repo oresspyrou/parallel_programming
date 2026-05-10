@@ -12,34 +12,33 @@ double f(double x) {
     return r;
 }
 
-// Recursively splits [i_start, i_end) into two halves, spawning a new task
-// for each half, until the segment is smaller than min_size — at that point
-// the segment is computed directly and its result added to sum.
-// min_size acts as the grain size control: too small causes task explosion,
-// too large reduces parallelism.
-void integrate_recursive(double a, double h, int i_start, int i_end,
-                         int min_size, double& sum) {
+// Recursively splits [i_start, i_end) in half, spawning a child task for each
+// half, until the segment is smaller than min_size — then computes directly.
+// Returns the interior sum for its segment so no shared accumulator is needed.
+// min_size controls task granularity: too small causes task explosion and
+// excessive overhead; too large reduces available parallelism.
+double integrate_recursive(double a, double h, int i_start, int i_end, int min_size) {
     if (i_end - i_start <= min_size) {
-        // Base case: compute this segment directly
         double local = 0.0;
         for (int i = i_start; i < i_end; i++)
             local += f(a + i * h);
-        #pragma omp critical
-        sum += local;
-        return;
+        return local;
     }
 
-    // Recursive case: split in half and spawn two child tasks
-    int mid = (i_start + i_end) / 2;
+    int    mid   = (i_start + i_end) / 2;
+    double left  = 0.0;
+    double right = 0.0;
 
-    #pragma omp task firstprivate(i_start, mid)
-    integrate_recursive(a, h, i_start, mid, min_size, sum);
+    #pragma omp task shared(left) firstprivate(i_start, mid)
+    left = integrate_recursive(a, h, i_start, mid, min_size);
 
-    #pragma omp task firstprivate(mid, i_end)
-    integrate_recursive(a, h, mid, i_end, min_size, sum);
+    #pragma omp task shared(right) firstprivate(mid, i_end)
+    right = integrate_recursive(a, h, mid, i_end, min_size);
 
-    // Wait for both child tasks to finish before returning
+    // Wait for both child tasks before combining their results.
     #pragma omp taskwait
+
+    return left + right;
 }
 
 int main(int argc, char* argv[]) {
@@ -68,9 +67,9 @@ int main(int argc, char* argv[]) {
 
     #pragma omp parallel
     {
-        // One thread kicks off the root task; all threads execute the tree
+        // One thread starts the root task; all threads execute the task tree.
         #pragma omp single
-        integrate_recursive(a, h, 1, n, min_size, sum);
+        sum = integrate_recursive(a, h, 1, n, min_size);
     }
 
     double elapsed = omp_get_wtime() - start;
