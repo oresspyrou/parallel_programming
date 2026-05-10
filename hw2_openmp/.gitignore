@@ -1,0 +1,18 @@
+# Compiled executables
+**/*.exe
+**/*.out
+**/*.o
+
+# Compiled binaries output folder
+bin/
+
+# Experiment results
+results/
+
+# Python virtual environment
+.venv/
+venv/
+
+# Python cache
+__pycache__/
+*.pyc
