@@ -104,13 +104,14 @@ chunk = "1000"
 b_static  = [get_time("B_static",  N, t, "chunk", chunk) for t in threads]
 b_dynamic = [get_time("B_dynamic", N, t, "chunk", chunk) for t in threads]
 b_guided  = [get_time("B_guided",  N, t, "chunk", chunk) for t in threads]
-serial_1t = get_time("B_static", N, 1, "chunk", chunk)
+serial_nu = get_time("serial_nonuniform", N, 1)
 
 plt.figure(figsize=(9, 5))
 plt.plot(threads, b_static,  marker='o', label='static')
 plt.plot(threads, b_dynamic, marker='s', label='dynamic')
 plt.plot(threads, b_guided,  marker='^', label='guided')
-plt.axhline(y=serial_1t, color='black', linestyle='--', label='1 thread (baseline)')
+if serial_nu:
+    plt.axhline(y=serial_nu, color='black', linestyle='--', label='Serial (non-uniform)')
 plt.title(f'B: static vs dynamic vs guided (N=1M, chunk={chunk})')
 plt.xlabel('Αριθμός Threads')
 plt.ylabel('Χρόνος (seconds)')
@@ -179,5 +180,59 @@ plt.tight_layout()
 plt.savefig('results/plot7_C_minsize.png', dpi=150)
 plt.close()
 print("Saved: results/plot7_C_minsize.png")
+
+# ============================================================
+# Plot 8 — B/C: Speedup vs Threads με σωστό serial baseline
+# ============================================================
+N = 1000000
+serial_nu = get_time("serial_nonuniform", N, 1)
+
+if serial_nu:
+    b_dyn  = [get_time("B_dynamic",  N, t, "chunk", "1000") for t in threads]
+    c_task = [get_time("C_tasks",    N, t, "num_tasks", "16") for t in threads]
+    c_rec  = [get_time("C_recursive",N, t, "min_size", "10000") for t in threads]
+
+    plt.figure(figsize=(9, 5))
+    plt.plot(threads, [1, 2, 3, 4], linestyle='--', color='black', label='Ιδανικό')
+    plt.plot(threads, speedup(serial_nu, b_dyn),  marker='o', label='B dynamic')
+    plt.plot(threads, speedup(serial_nu, c_task), marker='s', label='C tasks')
+    plt.plot(threads, speedup(serial_nu, c_rec),  marker='^', label='C recursive')
+    plt.title('B & C: Speedup vs Threads (N=1M, non-uniform f)')
+    plt.xlabel('Αριθμός Threads')
+    plt.ylabel('Speedup')
+    plt.xticks(threads)
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig('results/plot8_BC_speedup.png', dpi=150)
+    plt.close()
+    print("Saved: results/plot8_BC_speedup.png")
+
+# ============================================================
+# Plot 9 — BONUS: pthreads vs OpenMP (uniform f, N=1M)
+# ============================================================
+N = 1000000
+serial_t    = get_time("serial", N, 1)
+omp_red     = [get_time("A_reduction",    N, t) for t in threads]
+pth_nolock  = [get_time("pthreads_A_noLock", N, t) for t in threads]
+
+if any(pth_nolock):
+    plt.figure(figsize=(9, 5))
+    plt.plot(threads, [1, 2, 3, 4], linestyle='--', color='black', label='Ιδανικό')
+    if serial_t:
+        plt.plot(threads, speedup(serial_t, omp_red),    marker='o', label='OpenMP reduction')
+        plt.plot(threads, speedup(serial_t, pth_nolock), marker='s', label='pthreads (static block)')
+    plt.title('BONUS: OpenMP vs pthreads — Speedup (N=1M, f=sin(x))')
+    plt.xlabel('Αριθμός Threads')
+    plt.ylabel('Speedup')
+    plt.xticks(threads)
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig('results/plot9_bonus_omp_vs_pthreads.png', dpi=150)
+    plt.close()
+    print("Saved: results/plot9_bonus_omp_vs_pthreads.png")
+else:
+    print("Skipped plot9 — no pthreads data in results.csv")
 
 print("\nΌλα τα γραφήματα αποθηκεύτηκαν στο results/")
