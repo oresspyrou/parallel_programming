@@ -1,0 +1,17 @@
+# Compiled executables (anywhere in the repo)
+**/*.exe
+**/*.out
+**/*.o
+
+# Compiled binaries output folder
+bin/
+
+# Plot output folder
+results/
+
+# Python virtual environment
+trapmaster/
+
+# Python cache
+__pycache__/
+*.pyc
