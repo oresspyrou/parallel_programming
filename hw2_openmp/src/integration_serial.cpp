@@ -1,6 +1,7 @@
 #include <iostream>
 #include <cmath>
 #include <chrono>
+#include <cstdlib>
 
 double f(double x) {
     return sin(x);

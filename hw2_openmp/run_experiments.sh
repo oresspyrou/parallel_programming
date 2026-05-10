@@ -7,6 +7,9 @@
 # Usage: bash run_experiments.sh
 # ============================================================
 
+# Ensure MSYS2 compiler is in PATH
+export PATH="/c/msys64/ucrt64/bin:$PATH"
+
 RUNS=20
 A=0
 B=3.14159265
