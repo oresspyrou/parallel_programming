@@ -6,8 +6,8 @@
 # Compiled binaries output folder
 bin/
 
-# Experiment results
-results/
+# Experiment results (binaries excluded, plots and CSV tracked)
+results/bin/
 
 # Python virtual environment
 .venv/
